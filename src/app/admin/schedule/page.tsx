@@ -48,6 +48,48 @@ type WeeklySchedule = {
   [key: string]: ScheduleItem[];
 };
 
+type Teacher = {
+  _id: string;
+  name: string;
+  surname: string;
+  username: string;
+  email?: string;
+  subjects?: string[];
+};
+
+// Time picker component
+const TimePicker = ({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) => {
+  // Generate time slots from 06:00 to 20:00 with 30-minute intervals
+  const generateTimeSlots = () => {
+    const slots = [];
+    for (let hour = 6; hour <= 20; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        const displayTime = formatTime(timeString);
+        slots.push({ value: timeString, display: displayTime });
+      }
+    }
+    return slots;
+  };
+
+  const timeSlots = generateTimeSlots();
+
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent className="max-h-60">
+        {timeSlots.map((slot) => (
+          <SelectItem key={slot.value} value={slot.value}>
+            {slot.display}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+};
+
 // Helper for Roman numerals for class display
 const romanize = (num: number): string => {
   const romanNumerals: [number, string][] = [
@@ -81,6 +123,7 @@ export default function AdminSchedule() {
   const [showDialog, setShowDialog] = useState(false);
   const [sections, setSections] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
 
   const [formData, setFormData] = useState({
     classId: "",
@@ -101,6 +144,7 @@ export default function AdminSchedule() {
   useEffect(() => {
     fetchSections();
     fetchSubjects();
+    fetchTeachers();
   }, []);
 
   const fetchSchedule = async () => {
@@ -150,6 +194,19 @@ export default function AdminSchedule() {
     }
   };
 
+  const fetchTeachers = async () => {
+    try {
+      const response = await fetch('/api/admin/teachers');
+      if (!response.ok) throw new Error("Failed to fetch teachers");
+
+      const data = await response.json();
+      setTeachers(data.teachers || []);
+    } catch (error) {
+      console.error("Error fetching teachers:", error);
+      toast.error("Failed to load teachers");
+    }
+  };
+
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -163,10 +220,9 @@ export default function AdminSchedule() {
         return;
       }
 
-      // Validate time format
-      const timeFormat = /^([01]\d|2[0-3]):([0-5]\d)$/;
-      if (!timeFormat.test(formData.startTime) || !timeFormat.test(formData.endTime)) {
-        toast.error("Time must be in 24-hour format (HH:MM)");
+      // Validate that end time is after start time
+      if (formData.startTime >= formData.endTime) {
+        toast.error("End time must be after start time");
         return;
       }
 
@@ -357,34 +413,44 @@ export default function AdminSchedule() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="startTime">Start Time (24h format)</Label>
-                      <Input
-                        id="startTime"
+                      <Label htmlFor="startTime">Start Time</Label>
+                      <TimePicker
                         value={formData.startTime}
-                        onChange={(e) => handleInputChange("startTime", e.target.value)}
-                        placeholder="e.g., 08:00"
+                        onChange={(value) => handleInputChange("startTime", value)}
+                        placeholder="Select start time"
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="endTime">End Time (24h format)</Label>
-                      <Input
-                        id="endTime"
+                      <Label htmlFor="endTime">End Time</Label>
+                      <TimePicker
                         value={formData.endTime}
-                        onChange={(e) => handleInputChange("endTime", e.target.value)}
-                        placeholder="e.g., 09:00"
+                        onChange={(value) => handleInputChange("endTime", value)}
+                        placeholder="Select end time"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="teacherName">Teacher Name</Label>
-                    <Input
-                      id="teacherName"
+                    <Label htmlFor="teacher">Teacher</Label>
+                    <Select
                       value={formData.teacherName}
-                      onChange={(e) => handleInputChange("teacherName", e.target.value)}
-                      placeholder="Teacher Name"
-                    />
+                      onValueChange={(value) => handleInputChange("teacherName", value)}
+                    >
+                      <SelectTrigger id="teacher">
+                        <SelectValue placeholder="Select teacher" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teachers.map((teacher) => (
+                          <SelectItem key={teacher._id} value={`${teacher.name} ${teacher.surname}`}>
+                            <div className="flex flex-col">
+                              <span>{teacher.name} {teacher.surname}</span>
+                              <span className="text-xs text-muted-foreground">{teacher.username}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 

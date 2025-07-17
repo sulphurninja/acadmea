@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import {
   Calendar,
   Clock,
@@ -41,6 +42,10 @@ export default function EventsPage() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  // State for delete confirmation
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [eventToDelete, setEventToDelete] = useState<number | null>(null);
 
   // State for data
   const [classes, setClasses] = useState<any[]>([]);
@@ -167,21 +172,27 @@ export default function EventsPage() {
     }
   };
 
+  // Open delete confirmation dialog
+  const handleDeleteClick = (eventId: number) => {
+    setEventToDelete(eventId);
+    setDeleteDialogOpen(true);
+  };
+
   // Delete event
-  const handleDeleteEvent = async (eventId: number) => {
-    if (!confirm("Are you sure you want to delete this event?")) {
-      return;
-    }
+  const handleDeleteEvent = async () => {
+    if (!eventToDelete) return;
 
     try {
-      const response = await fetch(`/api/admin/events/${eventId}`, {
+      const response = await fetch(`/api/admin/events/${eventToDelete}`, {
         method: 'DELETE',
       });
 
       if (response.ok) {
         toast.success("Event deleted successfully");
         // Remove from state
-        setEvents(events.filter(event => event.id !== eventId));
+        setEvents(events.filter(event => event.id !== eventToDelete));
+        setDeleteDialogOpen(false);
+        setEventToDelete(null);
       } else {
         const data = await response.json();
         toast.error(data.message || "Failed to delete event");
@@ -491,116 +502,147 @@ export default function EventsPage() {
           </Dialog>
         </div>
 
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure you want to delete this event?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the event from the system.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => {
+                setDeleteDialogOpen(false);
+                setEventToDelete(null);
+              }}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteEvent}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete Event
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         {/* Filters */}
         <Card>
           <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-  <div className="md:col-span-2">
-    <Label htmlFor="search" className="text-xs">Search Events</Label>
-    <div className="relative">
-      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-      <Input
-        id="search"
-        placeholder="Search by title..."
-        className="pl-9"
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-      />
-    </div>
-  </div>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="md:col-span-2">
+                <Label htmlFor="search" className="text-xs">Search Events</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="search"
+                    placeholder="Search by title..."
+                    className="pl-9"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
 
-  <div>
-    <Label htmlFor="filterClass" className="text-xs">Filter by Class</Label>
-    <Select value={filterClass} onValueChange={setFilterClass}>
-      <SelectTrigger id="filterClass">
-        <SelectValue placeholder="All Classes" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="All">All Classes</SelectItem>
-        {classes.map((classItem) => (
-          <SelectItem
-            key={`filter-class-${classItem._id || classItem.id}`}
-            value={String(classItem._id || classItem.id)}
-          >
-            {classItem.name || "Unnamed Class"}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  </div>
+              <div>
+                <Label htmlFor="filterClass" className="text-xs">Filter by Class</Label>
+                <Select value={filterClass} onValueChange={setFilterClass}>
+                  <SelectTrigger id="filterClass">
+                    <SelectValue placeholder="All Classes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Classes</SelectItem>
+                    {classes.map((classItem) => (
+                      <SelectItem
+                        key={`filter-class-${classItem._id || classItem.id}`}
+                        value={String(classItem._id || classItem.id)}
+                      >
+                        {classItem.name || "Unnamed Class"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-  <div>
-    <Label className="text-xs">Date Range</Label>
-    <div className="flex gap-2">
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn(
-              "justify-start text-left font-normal w-full text-xs",
-              !filterStartDate && "text-muted-foreground"
-            )}
-          >
-            <CalendarIcon className="mr-2 h-3 w-3" />
-            {filterStartDate ? format(filterStartDate, "PP") : "Start date"}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0">
-          <CalendarComponent
-            mode="single"
-            selected={filterStartDate}
-            onSelect={setFilterStartDate}
-            initialFocus
-          />
-        </PopoverContent>
-      </Popover>
+              <div>
+                <Label className="text-xs">Date Range</Label>
+                <div className="flex gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "justify-start text-left font-normal w-full text-xs",
+                          !filterStartDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-3 w-3" />
+                        {filterStartDate ? format(filterStartDate, "PP") : "Start date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <CalendarComponent
+                        mode="single"
+                        selected={filterStartDate}
+                        onSelect={setFilterStartDate}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
 
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn(
-              "justify-start text-left font-normal w-full text-xs",
-              !filterEndDate && "text-muted-foreground"
-            )}
-          >
-            <CalendarIcon className="mr-2 h-3 w-3" />
-            {filterEndDate ? format(filterEndDate, "PP") : "End date"}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0">
-          <CalendarComponent
-            mode="single"
-            selected={filterEndDate}
-            onSelect={setFilterEndDate}
-            initialFocus
-          />
-        </PopoverContent>
-      </Popover>
-    </div>
-  </div>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "justify-start text-left font-normal w-full text-xs",
+                          !filterEndDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-3 w-3" />
+                        {filterEndDate ? format(filterEndDate, "PP") : "End date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <CalendarComponent
+                        mode="single"
+                        selected={filterEndDate}
+                        onSelect={setFilterEndDate}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
 
-  <div className="flex items-end gap-2">
-    <Button
-      variant="default"
-      className="w-full text-xs"
-      onClick={handleApplyFilters}
-    >
-      Apply Filters
-    </Button>
+            </div>
 
-  </div>
-  <Button
-      variant="outline"
-      className="w-full text-xs"
-      onClick={handleClearFilters}
-    >
-      <FilterX className="h-3 w-3 mr-1" />
-      Clear
-    </Button>
-</div>
+            <div className="flex items-end mt-4 gap-2">
+              <div>
+                <Button
+                  variant="default"
+                  className="w-full text-xs"
+                  onClick={handleApplyFilters}
+                >
+                  Apply Filters
+                </Button>
+              </div>
+              <div>
+                <Button
+                  variant="outline"
+                  className="w-full text-xs"
+                  onClick={handleClearFilters}
+                >
+                  <FilterX className="h-3 w-3 mr-1" />
+                  Clear
+                </Button>
+              </div>
+            </div>
+
           </CardContent>
         </Card>
 
@@ -627,7 +669,7 @@ export default function EventsPage() {
                         key={event.id}
                         event={event}
                         onEdit={() => handleEditEvent(event.id)}
-                        onDelete={() => handleDeleteEvent(event.id)}
+                        onDelete={() => handleDeleteClick(event.id)}
                       />
                     ))}
                   </div>
@@ -660,7 +702,7 @@ export default function EventsPage() {
                         key={event.id}
                         event={event}
                         onEdit={() => handleEditEvent(event.id)}
-                        onDelete={() => handleDeleteEvent(event.id)}
+                        onDelete={() => handleDeleteClick(event.id)}
                       />
                     ))}
                   </div>
@@ -691,7 +733,7 @@ export default function EventsPage() {
                         key={event.id}
                         event={event}
                         onEdit={() => handleEditEvent(event.id)}
-                        onDelete={() => handleDeleteEvent(event.id)}
+                        onDelete={() => handleDeleteClick(event.id)}
                       />
                     ))}
                   </div>
@@ -722,7 +764,7 @@ export default function EventsPage() {
                         key={event.id}
                         event={event}
                         onEdit={() => handleEditEvent(event.id)}
-                        onDelete={() => handleDeleteEvent(event.id)}
+                        onDelete={() => handleDeleteClick(event.id)}
                       />
                     ))}
                   </div>
@@ -786,7 +828,7 @@ function EventCard({ event, onEdit, onDelete }) {
           {event.description || "No description provided"}
         </p>
 
-        <div className="space-y-1 text-sm">
+     <div className="space-y-1 text-sm">
           <div className="flex items-start gap-2">
             <Clock className="h-4 w-4 text-muted-foreground mt-0.5" />
             <div>
@@ -808,7 +850,7 @@ function EventCard({ event, onEdit, onDelete }) {
           {isPastEvent ? (
             <>Event Completed</>
           ) : (
-            <>View Details<ChevronRight className="h-3 w-3" /></>
+            <>Scheduled</>
           )}
         </Button>
       </CardFooter>

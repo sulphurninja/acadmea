@@ -124,10 +124,15 @@ export default function AdminExams() {
   }, []);
 
   useEffect(() => {
-    if (formData.gradeId && Array.isArray(subjects)) {
+    if (formData.gradeId && formData.gradeId !== '' && Array.isArray(subjects)) {
+      console.log('Selected grade ID:', formData.gradeId);
+      console.log('Available subjects:', subjects);
+
       const filtered = subjects.filter(
         subject => subject.gradeId === Number(formData.gradeId)
       );
+
+      console.log('Filtered subjects:', filtered);
       setFilteredSubjects(filtered);
 
       // Reset subject selection if current selection is not valid for the new grade
@@ -135,7 +140,11 @@ export default function AdminExams() {
         setFormData(prev => ({ ...prev, subjectId: '' }));
       }
     } else {
-      setFilteredSubjects(Array.isArray(subjects) ? subjects : []);
+      setFilteredSubjects([]);
+      // Reset subject when no grade is selected
+      if (formData.subjectId) {
+        setFormData(prev => ({ ...prev, subjectId: '' }));
+      }
     }
   }, [formData.gradeId, subjects]);
 
@@ -178,6 +187,8 @@ export default function AdminExams() {
         throw new Error('Failed to fetch subjects');
       }
       const data = await response.json();
+
+      console.log('Subjects data:', data);
 
       // Handle different response formats
       if (data.subjects && Array.isArray(data.subjects)) {
@@ -289,6 +300,20 @@ export default function AdminExams() {
     }
   };
 
+  const handleGradeChange = (value: string) => {
+    console.log('Grade change handler called with:', value);
+    setFormData(prev => ({
+      ...prev,
+      gradeId: value,
+      subjectId: '' // Reset subject when grade changes
+    }));
+  };
+
+  const handleSubjectChange = (value: string) => {
+    console.log('Subject change handler called with:', value);
+    setFormData(prev => ({ ...prev, subjectId: value }));
+  };
+
   const validateForm = () => {
     const errors = {
       title: !formData.title,
@@ -398,6 +423,7 @@ export default function AdminExams() {
       maxMarks: false,
       duration: false
     });
+    setFilteredSubjects([]);
   };
 
   const openEditExam = (exam: Exam) => {
@@ -456,7 +482,7 @@ export default function AdminExams() {
     <DashboardLayout>
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold">Exams Management</h1>
-        <Button onClick={() => setIsCreateDialogOpen(true)} className="mt-3 text-white   sm:mt-0">
+        <Button onClick={() => setIsCreateDialogOpen(true)} className="mt-3 text-white sm:mt-0">
           <Plus className="h-4 w-4 mr-2" /> Create Exam
         </Button>
       </div>
@@ -635,213 +661,234 @@ export default function AdminExams() {
         </CardContent>
       </Card>
 
-      {/* Create/Edit Exam Dialog */}
+      {/* Create / Edit Exam Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Create New Exam</DialogTitle>
+            <DialogTitle>{formData.title ? "Edit Exam" : "Create New Exam"}</DialogTitle>
             <DialogDescription>
-              Add a new exam to the system. Fill all the required fields.
+              {formData.title
+                ? "Update the exam details below."
+                : "Add a new exam to the system. Fill all the required fields."}
             </DialogDescription>
           </DialogHeader>
+
+          {/* ─────────────── Form ─────────────── */}
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-1 gap-3">
+            {/* Title & Description */}
+            <div className="space-y-2">
+              <Label htmlFor="title" className={formErrors.title && "text-red-500"}>
+                Exam Title*
+              </Label>
+              <Input
+                id="title"
+                name="title"
+                value={formData.title}
+                onChange={handleInputChange}
+                className={formErrors.title && "border-red-500"}
+              />
+              {formErrors.title && (
+                <p className="text-sm text-red-500">Title is required</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                name="description"
+                value={formData.description}
+                onChange={handleInputChange}
+                rows={3}
+              />
+            </div>
+
+            {/* Date & Exam Type */}
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="title" className={formErrors.title ? "text-red-500" : ""}>
-                  Exam Title*
+                <Label htmlFor="examDate" className={formErrors.examDate && "text-red-500"}>
+                  Exam Date*
                 </Label>
-                <Input
-                  id="title"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleInputChange}
-                  className={formErrors.title ? "border-red-500" : ""}
-                />
-                {formErrors.title && (
-                  <p className="text-sm text-red-500">Title is required</p>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={`w-full justify-start text-left font-normal ${formErrors.examDate && "border-red-500"
+                        }`}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formData.examDate ? format(formData.examDate, "PPP") : "Pick a date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={formData.examDate}
+                      onSelect={handleDateChange}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                {formErrors.examDate && (
+                  <p className="text-sm text-red-500">Exam date is required</p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  rows={3}
+                <Label htmlFor="examType">Exam Type*</Label>
+                <Select
+                  value={formData.examType}
+                  onValueChange={(v) => setFormData((p) => ({ ...p, examType: v }))}
+                >
+                  <SelectTrigger id="examType">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="UNIT_TEST">Unit Test</SelectItem>
+                    <SelectItem value="MIDTERM">Midterm</SelectItem>
+                    <SelectItem value="FINAL">Final</SelectItem>
+                    <SelectItem value="QUIZ">Quiz</SelectItem>
+                    <SelectItem value="ASSIGNMENT">Assignment</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Grade / Class */}
+            <div className="space-y-2">
+              <Label htmlFor="gradeId" className={formErrors.gradeId && "text-red-500"}>
+                Grade / Class*
+              </Label>
+              <select
+                id="gradeId"
+                name="gradeId"
+                value={formData.gradeId}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  handleGradeChange(value);
+                }}
+                className={`w-full border rounded-md px-3 py-2 text-sm ${formErrors.gradeId ? "border-red-500" : "border-border"
+                  }`}
+              >
+                <option value="">– Select grade –</option>
+                {grades.map((g) => (
+                  <option key={g.id} value={String(g.id)}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+              {formErrors.gradeId && (
+                <p className="text-sm text-red-500">Grade is required</p>
+              )}
+            </div>
+
+            {/* Subject */}
+            <div className="space-y-2">
+              <Label htmlFor="subjectId" className={formErrors.subjectId && "text-red-500"}>
+                Subject*
+              </Label>
+              <select
+                id="subjectId"
+                name="subjectId"
+                value={formData.subjectId}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  handleSubjectChange(value);
+                }}
+                disabled={!formData.gradeId}
+                className={`w-full border rounded-md px-3 py-2 text-sm ${formErrors.subjectId ? "border-red-500" : "border-border"
+                  }`}
+              >
+                <option value="">
+                  {formData.gradeId ? "Select subject" : "Select grade first"}
+                </option>
+                {filteredSubjects.length === 0 && formData.gradeId && (
+                  <option value="" disabled>
+                    No subjects available
+                  </option>
+                )}
+                {filteredSubjects.map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              {formErrors.subjectId && (
+                <p className="text-sm text-red-500">Subject is required</p>
+              )}
+            </div>
+
+
+            {/* Marks / Duration / Status */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="maxMarks" className={formErrors.maxMarks && "text-red-500"}>
+                  Maximum Marks*
+                </Label>
+                <Input
+                  id="maxMarks"
+                  name="maxMarks"
+                  type="number"
+                  value={formData.maxMarks}
+                  onChange={handleNumberInputChange}
+                  className={formErrors.maxMarks && "border-red-500"}
                 />
+                {formErrors.maxMarks && (
+                  <p className="text-sm text-red-500">
+                    Marks must be greater than 0
+                  </p>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label htmlFor="examDate" className={formErrors.examDate ? "text-red-500" : ""}>
-                    Exam Date*
-                  </Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={`w-full justify-start text-left font-normal ${formErrors.examDate ? "border-red-500" : ""}`}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formData.examDate ? format(formData.examDate, "PPP") : <span>Pick a date</span>}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={formData.examDate}
-                        onSelect={handleDateChange}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  {formErrors.examDate && (
-                    <p className="text-sm text-red-500">Exam date is required</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="examType">Exam Type*</Label>
-                  <Select
-                    name="examType"
-                    value={formData.examType}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, examType: value }))}
-                  >
-                    <SelectTrigger id="examType">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="UNIT_TEST">Unit Test</SelectItem>
-                      <SelectItem value="MIDTERM">Midterm</SelectItem>
-                      <SelectItem value="FINAL">Final</SelectItem>
-                      <SelectItem value="QUIZ">Quiz</SelectItem>
-                      <SelectItem value="ASSIGNMENT">Assignment</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="duration" className={formErrors.duration && "text-red-500"}>
+                  Duration (min)*
+                </Label>
+                <Input
+                  id="duration"
+                  name="duration"
+                  type="number"
+                  value={formData.duration}
+                  onChange={handleNumberInputChange}
+                  className={formErrors.duration && "border-red-500"}
+                />
+                {formErrors.duration && (
+                  <p className="text-sm text-red-500">
+                    Duration must be greater than 0
+                  </p>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label htmlFor="gradeId" className={formErrors.gradeId ? "text-red-500" : ""}>
-                    Grade/Class*
-                  </Label>
-                  <Select
-                    name="gradeId"
-                    value={formData.gradeId}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, gradeId: value }))}
-                  >
-                    <SelectTrigger id="gradeId" className={formErrors.gradeId ? "border-red-500" : ""}>
-                      <SelectValue placeholder="Select grade" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Array.isArray(grades) && grades.map((grade) => (
-                        <SelectItem key={grade.id} value={grade.id?.toString() || 'None'}>
-                          {grade.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {formErrors.gradeId && (
-                    <p className="text-sm text-red-500">Grade is required</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="subjectId" className={formErrors.subjectId ? "text-red-500" : ""}>
-                    Subject*
-                  </Label>
-                  <Select
-                    name="subjectId"
-                    value={formData.subjectId}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, subjectId: value }))}
-                    disabled={!formData.gradeId}
-                  >
-                    <SelectTrigger id="subjectId" className={formErrors.subjectId ? "border-red-500" : ""}>
-                      <SelectValue placeholder={formData.gradeId ? "Select subject" : "Select grade first"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Array.isArray(filteredSubjects) && filteredSubjects.map((subject) => (
-                        <SelectItem key={subject.id} value={subject.id?.toString() || 'None'}>
-                          {subject.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {formErrors.subjectId && (
-                    <p className="text-sm text-red-500">Subject is required</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-2">
-                  <Label htmlFor="maxMarks" className={formErrors.maxMarks ? "text-red-500" : ""}>
-                    Maximum Marks*
-                  </Label>
-                  <Input
-                    id="maxMarks"
-                    name="maxMarks"
-                    type="number"
-                    value={formData.maxMarks}
-                    onChange={handleNumberInputChange}
-                    className={formErrors.maxMarks ? "border-red-500" : ""}
-                  />
-                  {formErrors.maxMarks && (
-                    <p className="text-sm text-red-500">Marks must be greater than 0</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="duration" className={formErrors.duration ? "text-red-500" : ""}>
-                    Duration (minutes)*
-                  </Label>
-                  <Input
-                    id="duration"
-                    name="duration"
-                    type="number"
-                    value={formData.duration}
-                    onChange={handleNumberInputChange}
-                    className={formErrors.duration ? "border-red-500" : ""}
-                  />
-                  {formErrors.duration && (
-                    <p className="text-sm text-red-500">Duration must be greater than 0</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="status">Status*</Label>
-                  <Select
-                    name="status"
-                    value={formData.status}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, status: value }))}
-                  >
-                    <SelectTrigger id="status">
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="SCHEDULED">Scheduled</SelectItem>
-                      <SelectItem value="ONGOING">Ongoing</SelectItem>
-                      <SelectItem value="COMPLETED">Completed</SelectItem>
-                      <SelectItem value="CANCELLED">Cancelled</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="status">Status*</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(v) => setFormData((p) => ({ ...p, status: v }))}
+                >
+                  <SelectTrigger id="status">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SCHEDULED">Scheduled</SelectItem>
+                    <SelectItem value="ONGOING">Ongoing</SelectItem>
+                    <SelectItem value="COMPLETED">Completed</SelectItem>
+                    <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
+
+          {/* ─────────────── Footer ─────────────── */}
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateExam}>
-              Save Exam
-            </Button>
+            <Button onClick={handleCreateExam}>Save Exam</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
@@ -860,7 +907,7 @@ export default function AdminExams() {
               Delete
             </Button>
           </DialogFooter>
-</DialogContent>
+        </DialogContent>
       </Dialog>
     </DashboardLayout>
   );

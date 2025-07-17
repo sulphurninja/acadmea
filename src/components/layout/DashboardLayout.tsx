@@ -42,7 +42,8 @@ import {
   Video,
   Megaphone,
   IndianRupee,
-  MessageCircleIcon
+  MessageCircleIcon,
+  Loader2
 } from "lucide-react";
 import { PiBooksBold, PiExam } from "react-icons/pi";
 import { MdCoPresent } from "react-icons/md";
@@ -129,7 +130,7 @@ const teacherSections: SidebarSection[] = [
     links: [
       { href: "/teacher/messages", label: "Messages", icon: <MessageSquare className="h-5 w-5" />, notifications: 3 },
       { href: "/teacher/forum", label: "Discussion Forum", icon: <MessageCircleIcon className="h-5 w-5" />, notifications: 3 },
-      { href: "/teacher/settings", label: "Settings", icon: <Settings className="h-5 w-5" /> }
+      // { href: "/teacher/settings", label: "Settings", icon: <Settings className="h-5 w-5" /> }
     ]
   }
 ];
@@ -156,7 +157,7 @@ const studentSections: SidebarSection[] = [
     title: "Communication",
     links: [
       { href: "/student/forum", label: "Discussion Forum", icon: <MessageSquare className="h-5 w-5" />, notifications: 3 },
-      { href: "/student/settings", label: "Settings", icon: <Settings className="h-5 w-5" /> }
+      // { href: "/student/settings", label: "Settings", icon: <Settings className="h-5 w-5" /> }
     ]
   }
 ];
@@ -183,7 +184,7 @@ const parentSections: SidebarSection[] = [
     links: [
       { href: "/parent/messages", label: "Messages", icon: <MessageSquare className="h-5 w-5" />, notifications: 1 },
       { href: "/parent/fees", label: "Fee Management", icon: <IndianRupee className="h-5 w-5" />, notifications: 1 },
-      { href: "/parent/settings", label: "Settings", icon: <Settings className="h-5 w-5" /> }
+      // { href: "/parent/settings", label: "Settings", icon: <Settings className="h-5 w-5" /> }
     ]
   }
 ];
@@ -232,23 +233,26 @@ const AnimatedIcon = ({
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
+  
+  // All useState hooks MUST be called before any conditional logic
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [notifications, setNotifications] = useState([
-    { id: 1, title: "New assignment due", description: "Mathematics assignment due tomorrow", time: "5 min ago", read: false },
-    { id: 2, title: "Exam results published", description: "Your science exam results are now available", time: "2 hours ago", read: false },
-    { id: 3, title: "School event reminder", description: "Don't forget about the sports day this Friday", time: "Yesterday", read: true }
-  ]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  
+  // All useRef hooks MUST be called before any conditional logic
   const profileDropdownRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
 
+  // All useEffect hooks MUST be called before any conditional logic
   // Add scroll listener for header style changes
   useEffect(() => {
     const handleScroll = () => {
@@ -273,6 +277,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Fetch notifications
+  useEffect(() => {
+    if (user) {
+      fetchNotifications();
+    }
+  }, [user]);
+
+  // NOW we can do the conditional return after all hooks have been called
   if (!user) return null;
 
   let sections: SidebarSection[] = [];
@@ -319,18 +331,98 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   };
 
-  // Get unread notifications count
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const fetchNotifications = async () => {
+    setNotificationsLoading(true);
+    try {
+      const response = await fetch('/api/notifications?limit=5');
+      const data = await response.json();
 
-  // Handle marking notifications as read
-  const markAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
+      if (response.ok) {
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.notifications?.filter((n: any) => !n.isRead).length || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  // Mark notification as read
+  const markNotificationAsRead = async (notificationId: string) => {
+    try {
+      const response = await fetch(`/api/notifications/${notificationId}/read`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        setNotifications(prev => prev.map(n =>
+          n.id === notificationId ? { ...n, isRead: true, readAt: new Date().toISOString() } : n
+        ));
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  // Mark all notifications as read
+  const markAllAsRead = async () => {
+    try {
+      const response = await fetch('/api/notifications/mark-all-read', {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        setNotifications(prev => prev.map(n => ({ ...n, isRead: true, readAt: new Date().toISOString() })));
+        setUnreadCount(0);
+      }
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
+  };
+
+  // Get notification time ago
+  const getTimeAgo = (dateString: string) => {
+    const now = new Date();
+    const date = new Date(dateString);
+    const diffInMs = now.getTime() - date.getTime();
+    const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) return `${diffInHours}h ago`;
+
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays < 7) return `${diffInDays}d ago`;
+
+    return date.toLocaleDateString();
+  };
+
+  // Get notification icon
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'ANNOUNCEMENT':
+        return '📢';
+      case 'EXAM':
+        return '📝';
+      case 'ASSIGNMENT':
+        return '📋';
+      case 'ATTENDANCE':
+        return '👥';
+      case 'FEE':
+        return '💰';
+      case 'URGENT':
+        return '🚨';
+      default:
+        return '🔔';
+    }
   };
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-
-
       {/* Desktop Sidebar */}
       <aside className={cn(
         "fixed inset-y-0 left-0 z-20 w-72 bg-card shadow-sm hidden lg:block border-r border-border/40",
@@ -456,7 +548,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         >
           <div className="flex items-center justify-between h-16 px-4 md:px-6">
             <div className="flex items-center gap-3">
-
+              {/* Mobile menu button */}
+              <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" className="lg:hidden">
+                    <Menu className="h-5 w-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-72 p-0">
+                  <SheetHeader className="p-6 border-b border-border/40">
+                    <SheetTitle className="flex items-center gap-2">
+                      <School className="h-6 w-6 text-primary" />
+                      EduPortal
+                    </SheetTitle>
+                  </SheetHeader>
+                  {/* Mobile navigation content would go here */}
+                </SheetContent>
+              </Sheet>
 
               {/* Breadcrumb or page title */}
               <AnimatePresence mode="wait">
@@ -558,7 +666,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             animate={{ scale: 1 }}
                             transition={{ type: "spring", stiffness: 400, damping: 10 }}
                           >
-                            {unreadCount}
+                            {unreadCount > 99 ? '99+' : unreadCount}
                           </motion.span>
                         )}
                       </Button>
@@ -581,12 +689,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     >
                       <div className="flex items-center justify-between px-4 py-2 border-b border-border/40">
                         <h3 className="text-sm font-semibold">Notifications</h3>
-                        <Button variant="ghost" size="sm" onClick={markAllAsRead} className="h-8 text-xs">
-                          Mark all as read
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          {unreadCount > 0 && (
+                            <Badge variant="destructive" className="text-xs">
+                              {unreadCount} new
+                            </Badge>
+                          )}
+                          <Button variant="ghost" size="sm" onClick={markAllAsRead} className="h-8 text-xs">
+                            Mark all as read
+                          </Button>
+                        </div>
                       </div>
+
                       <div className="max-h-80 overflow-y-auto">
-                        {notifications.length > 0 ? (
+                        {notificationsLoading ? (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          </div>
+                        ) : notifications.length > 0 ? (
                           <div>
                             {notifications.map((notification) => (
                               <motion.div
@@ -595,18 +715,54 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                 animate={{ opacity: 1, x: 0 }}
                                 transition={{ duration: 0.2 }}
                                 className={cn(
-                                  "px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer relative",
-                                  !notification.read && "bg-primary/5"
+                                  "px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer relative border-l-2",
+                                  !notification.isRead ? "bg-primary/5 border-l-primary" : "border-l-transparent"
                                 )}
+                                onClick={() => {
+                                  if (!notification.isRead) {
+                                    markNotificationAsRead(notification.id);
+                                  }
+                                  if (notification.actionUrl) {
+                                    window.open(notification.actionUrl, '_blank');
+                                  }
+                                }}
                               >
-                                {!notification.read && (
-                                  <span className="absolute left-1.5 top-1/2 transform -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-primary"></span>
-                                )}
-                                <div className="mb-1 flex items-center justify-between">
-                                  <h4 className="text-sm font-medium">{notification.title}</h4>
-                                  <span className="text-xs text-muted-foreground">{notification.time}</span>
+                            <div className="flex items-start gap-3">
+                                  <div className="text-lg">
+                                    {getNotificationIcon(notification.type)}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <h4 className={cn(
+                                        "text-sm truncate",
+                                        !notification.isRead && "font-medium"
+                                      )}>
+                                        {notification.title}
+                                      </h4>
+                                      <div className="flex items-center gap-1">
+                                        <Badge variant="outline" className="text-xs">
+                                          {notification.type}
+                                        </Badge>
+                                        <span className="text-xs text-muted-foreground">
+                                          {getTimeAgo(notification.createdAt)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground line-clamp-2">
+                                      {notification.message}
+                                    </p>
+                                    <div className="flex items-center justify-between mt-1">
+                                      <span className="text-xs text-muted-foreground">
+                                        by {notification.createdBy}
+                                      </span>
+                                      {notification.priority === 'URGENT' && (
+                                        <Badge variant="destructive" className="text-xs">
+                                          Urgent
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
-                                <p className="text-xs text-muted-foreground">{notification.description}</p>
                               </motion.div>
                             ))}
                           </div>
@@ -617,6 +773,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           </div>
                         )}
                       </div>
+
                       <div className="border-t border-border/40 px-4 py-2">
                         <Button variant="ghost" size="sm" className="w-full justify-center text-xs" asChild>
                           <Link href={`/${user.role}/notifications`}>
@@ -728,10 +885,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       {user.role === 'student' && "View your assignments and check your class schedule."}
                       {user.role === 'parent' && "Stay updated with your child's academic progress."}
                     </p>
-                    <div className="mt-4 flex gap-3">
+                    <div className="mt-4 flex items-center gap-3">
                       <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                         <Button size="sm" className="gap-2 text-white">
-                          {user.role === 'admin' && <>View Reports <FileText className="h-4 w-4" /></>}
+                          {user.role === 'admin' && <>
+                            <Link className="flex gap-2 items-center" href='/admin/reports'>
+                              View Reports
+                              <FileText className="h-4 w-4" />
+                            </Link>
+                          </>}
                           {user.role === 'teacher' && <>
                             <Link className="flex gap-2" href='/teacher/schedule'>
                               Check Schedule <Calendar className="h-4 w-4" />
@@ -739,7 +901,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           </>}
                           {user.role === 'student' && <>
                             <Link className="flex gap-2" href='/student/exams'>
-                              View Upcoming Exams <ClipboardList className="h-4 w-4" />
+                              View Upcoming Exams <ClipboardList className="h-4 w-4" /> 
                             </Link>
                           </>}
                           {user.role === 'parent' && <>Check Performance <PieChart className="h-4 w-4" /></>}
@@ -747,7 +909,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       </motion.div>
                       <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                         <Button variant="outline" size="sm" className="gap-2">
-                          {user.role === 'admin' && <>School Analytics <BarChart3 className="h-4 w-4" /></>}
+                          {user.role === 'admin' && <>
+                            <Link className="flex gap-2 items-center" href='/admin/analytics'>
+                              School Analytics <BarChart3 className="h-4 w-4" />
+                            </Link></>}
                           {user.role === 'teacher' && <>Create Lesson <BookOpen className="h-4 w-4" /></>}
                           {/* {user.role === 'student' && <>Join Class <School className="h-4 w-4" /></>} */}
                           {user.role === 'parent' && <>Message Teacher <MessageSquare className="h-4 w-4" /></>}

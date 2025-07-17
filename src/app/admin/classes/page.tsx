@@ -550,7 +550,7 @@ export default function SectionsManagement() {
             <div className="grid gap-2">
               <Label htmlFor="grade">Class</Label>
               <Select
-                value={newSection.gradeId.toString()}
+                value={newSection.gradeId > 0 ? newSection.gradeId.toString() : ""}
                 onValueChange={(value) => {
                   const gradeId = parseInt(value);
                   setNewSection({

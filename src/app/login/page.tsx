@@ -47,23 +47,23 @@ export default function Login() {
           variant: "default",
         });
 
-        // Redirect based on user role
+        // Use window.location.href for hard navigation to ensure proper state
         setTimeout(() => {
-          switch(data.user.role) {
+          switch (data.user.role) {
             case 'admin':
-              router.push('/admin');
+              window.location.href = '/admin';
               break;
             case 'teacher':
-              router.push('/teacher');
+              window.location.href = '/teacher';
               break;
             case 'student':
-              router.push('/student');
+              window.location.href = '/student';
               break;
             case 'parent':
-              router.push('/parent');
+              window.location.href = '/parent';
               break;
             default:
-              router.push('/dashboard');
+              window.location.href = '/dashboard';
           }
         }, 1000);
       } else {

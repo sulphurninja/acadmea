@@ -21,7 +21,9 @@ export function middleware(request: NextRequest) {
 
     if (!token) {
       // Redirect to login if no token is present
-      return NextResponse.redirect(new URL('/login', request.url));
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('redirect', pathname);
+      return NextResponse.redirect(loginUrl);
     }
 
     try {
@@ -31,7 +33,9 @@ export function middleware(request: NextRequest) {
       // Check if token is expired
       if (decoded.exp * 1000 < Date.now()) {
         // Token expired, redirect to login
-        return NextResponse.redirect(new URL('/login', request.url));
+        const response = NextResponse.redirect(new URL('/login', request.url));
+        response.cookies.delete('token');
+        return response;
       }
 
       // Check role-based access
@@ -57,9 +61,17 @@ export function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/unauthorized', request.url));
       }
 
+      // Add user info to headers for the page to access
+      const response = NextResponse.next();
+      response.headers.set('x-user-role', role);
+      response.headers.set('x-user-id', decoded.id);
+      return response;
+
     } catch (error) {
       // Invalid token, redirect to login
-      return NextResponse.redirect(new URL('/login', request.url));
+      const response = NextResponse.redirect(new URL('/login', request.url));
+      response.cookies.delete('token');
+      return response;
     }
   }
 
@@ -68,5 +80,11 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   // Specify which paths this middleware should run on
-  matcher: ['/dashboard/:path*', '/admin/:path*', '/teacher/:path*', '/student/:path*', '/parent/:path*'],
+  matcher: [
+    '/dashboard/:path*', 
+    '/admin/:path*', 
+    '/teacher/:path*', 
+    '/student/:path*', 
+    '/parent/:path*'
+  ],
 };
